@@ -1976,3 +1976,18 @@
 	Vulkan	Vulkan
 	Alt-click to define a source point to clone from	Kliknutím s klávesou Alt určete zdrojový bod pro klonování
 	No path to make a selection from: draw one with the Pen tool or select one in the Paths panel.	Není k dispozici žádná cesta, ze které by šlo vytvořit výběr: nakreslete ji nástrojem Pero nebo ji vyberte na panelu Cesty.
+
+# Color panel modes (#294)
+	Hue Cube	Krychle odstínu
+	Brightness Cube	Krychle jasu
+	Color Wheel	Barevné kolo
+	Grayscale Sliders	Jezdce stupňů šedi
+	RGB Sliders	Jezdce RGB
+	HSB Sliders	Jezdce HSB
+	CMYK Sliders	Jezdce CMYK
+	Lab Sliders	Jezdce Lab
+	Web Color Sliders	Jezdce webových barev
+	Copy Color's Hex Code	Kopírovat hexadecimální kód barvy
+	Foreground color	Barva popředí
+	Color management is unavailable.	Správa barev není k dispozici.
+	Out of gamut for printing: click to use the closest printable color	Mimo tiskový gamut: klepnutím použijete nejbližší tisknutelnou barvu
