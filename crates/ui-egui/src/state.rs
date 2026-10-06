@@ -621,6 +621,9 @@ pub struct UiState {
     /// Right-dock group order, heights and collapsed groups (see `dock`).
     #[serde(default)]
     pub dock: crate::dock::DockLayout,
+    /// Color panel mode (Hue Cube, sliders…) and which chip it edits (see `color_panel_ui`).
+    #[serde(default)]
+    pub color_panel: crate::color_panel_ui::ColorPanelState,
     /// Brush Settings: selected section (0 = Brush Tip Shape) and tab (0 settings, 1 Brushes).
     #[serde(default)]
     pub brush_section: usize,
@@ -690,6 +693,7 @@ impl Default for UiState {
             palette_open: false,
             dock_tabs: DockTabs::default(),
             dock: Default::default(),
+            color_panel: Default::default(),
             brush_section: 0,
             brush_tab: 0,
             brushes_panel: Default::default(),

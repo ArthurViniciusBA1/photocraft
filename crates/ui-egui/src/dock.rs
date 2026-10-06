@@ -376,7 +376,8 @@ pub fn show(app: &mut PhotocraftApp, ui: &mut egui::Ui, shown: &[Group], mut bod
         let tabs = g.tabs(t.pro);
         let resp = widgets::card_ex(&mut child, g.key(), tabs, &mut sel, collapsed, |ui, tab| {
             let inner = ui.available_height().max(0.0);
-            if g.scrolls_itself(tab) {
+            // The Color panel fits its controls to the group itself (and scrolls when it can't).
+            if g.scrolls_itself(tab) || tabs.get(tab) == Some(&"Color") {
                 ui.set_min_height(inner);
                 body(app, ui, g, tab);
             } else {
@@ -411,6 +412,10 @@ pub fn show(app: &mut PhotocraftApp, ui: &mut egui::Ui, shown: &[Group], mut bod
             ui.set_min_width(170.0);
             if tabs.get(sel) == Some(&"Layers") {
                 crate::layer_row_ui::panel_menu(app, ui);
+                ui.separator();
+            }
+            if tabs.get(sel) == Some(&"Color") {
+                crate::color_panel_ui::panel_menu(app, ui);
                 ui.separator();
             }
             if ui.button(if collapsed { tl!("Expand Panel Group") } else { tl!("Collapse Panel Group") }).clicked() {

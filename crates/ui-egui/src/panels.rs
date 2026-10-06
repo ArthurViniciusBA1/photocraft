@@ -979,10 +979,10 @@ fn dock_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, group: crate::dock::Gro
     match (group, tab) {
         (Group::Color, 2) => crate::preset_panels::gradients_panel(app, ui),
         (Group::Color, 3) => crate::preset_panels::patterns_panel(app, ui),
-        (Group::Color, 0) if pro => color_field(app, ui),
+        (Group::Color, 0) if pro => crate::color_panel_ui::panel(app, ui),
         (Group::Color, _) if pro => swatches(app, ui),
         (Group::Color, 0) => swatches(app, ui),
-        (Group::Color, _) => color_picker(app, ui),
+        (Group::Color, _) => crate::color_panel_ui::panel(app, ui),
         (Group::Properties, 0) => properties_body(app, ui),
         (Group::Properties, _) => adjustments_grid(app, ui),
         (Group::Character, tab) => crate::type_tool::character_panel(app, ui, tab == 1),
@@ -1199,33 +1199,6 @@ fn swatches(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     }
     ui.add_space(2.0);
     ui.label(RichText::new(tl!("Click sets foreground · right-click sets background")).small().color(t.text_faint));
-}
-
-fn color_picker(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
-    let fg = app.session.tools.foreground;
-    let hsva0 = srgb_hsva(fg);
-    let mut h = hsva0.h * 360.0;
-    let mut s = hsva0.s * 100.0;
-    let mut v = hsva0.v * 100.0;
-    let hue = widgets::hue_stops();
-    widgets::slider_row(ui, tl!("Hue"), &mut h, 0.0..=360.0, "°", Some(&hue));
-    let sat_stops =
-        [egui::ecolor::Hsva::new(hsva0.h, 0.0, hsva0.v.max(0.2), 1.0), egui::ecolor::Hsva::new(hsva0.h, 1.0, hsva0.v.max(0.2), 1.0)].map(Color32::from);
-    widgets::slider_row(ui, tl!("Saturation"), &mut s, 0.0..=100.0, "%", Some(&sat_stops));
-    let val_stops = [Color32::BLACK, Color32::from(egui::ecolor::Hsva::new(hsva0.h, hsva0.s, 1.0, 1.0))];
-    widgets::slider_row(ui, tl!("Brightness"), &mut v, 0.0..=100.0, "%", Some(&val_stops));
-    let hsva = egui::ecolor::Hsva::new(h / 360.0, s / 100.0, v / 100.0, 1.0);
-    if hsva != hsva0 {
-        app.session.tools.foreground = hsva_srgb(hsva);
-    }
-    let [r, g, b, _] = hsva.to_srgba_unmultiplied();
-    let t = Tokens::get(ui.ctx());
-    ui.horizontal(|ui| {
-        let (sw, _) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::hover());
-        ui.painter().rect_filled(sw, 6.0, Color32::from_rgb(r, g, b));
-        ui.label(RichText::new(format!("#{r:02X}{g:02X}{b:02X}")).font(theme::mono(12.5)).color(t.text));
-        ui.label(RichText::new(format!("RGB {r} {g} {b}")).font(theme::mono(11.5)).color(t.text_faint));
-    });
 }
 
 // ----------------------------------------------------------------------------- layers
@@ -2082,112 +2055,6 @@ fn adjustments_grid(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     }
 }
 
-/// Photoshop Color panel: saturation/brightness field + hue strip, drawn as shaded meshes.
-fn color_field(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
-    let t = Tokens::get(ui.ctx());
-    let fg = app.session.tools.foreground;
-    let key = egui::Id::new("color-field-hue");
-    let mut hsva = srgb_hsva(fg);
-    // Keep hue stable for greys (where RGB->HSV hue is undefined).
-    let remembered: f32 = ui.data(|d| d.get_temp(key)).unwrap_or(hsva.h);
-    if hsva.s < 0.01 || hsva.v < 0.01 {
-        hsva.h = remembered;
-    }
-    let w = ui.available_width();
-    let strip_w = 14.0;
-    let h = 120.0;
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        // Colour chips (fg/bg) at left, Photoshop style.
-        let (chips, _) = ui.allocate_exact_size(vec2(34.0, h), Sense::hover());
-        let bgr = Rect::from_min_size(chips.min + vec2(10.0, 10.0), vec2(22.0, 22.0));
-        let fgr = Rect::from_min_size(chips.min, vec2(22.0, 22.0));
-        ui.painter().rect_filled(bgr, 2.0, c32(app.session.tools.background));
-        ui.painter().rect_stroke(bgr, 2.0, Stroke::new(1.0, t.field_border), StrokeKind::Outside);
-        ui.painter().rect_filled(fgr, 2.0, c32(fg));
-        ui.painter().rect_stroke(fgr, 2.0, Stroke::new(1.0, Color32::from_gray(210)), StrokeKind::Outside);
-        // SV field.
-        let field_w = w - 34.0 - strip_w - 16.0;
-        let (field, fresp) = ui.allocate_exact_size(vec2(field_w, h), Sense::click_and_drag());
-        let mut mesh = egui::Mesh::default();
-        let n = 16;
-        for j in 0..=n {
-            for i in 0..=n {
-                let (sx, vy) = (i as f32 / n as f32, j as f32 / n as f32);
-                let c = Color32::from(egui::ecolor::Hsva::new(hsva.h, sx, 1.0 - vy, 1.0));
-                mesh.colored_vertex(pos2(field.left() + sx * field.width(), field.top() + vy * field.height()), c);
-            }
-        }
-        for j in 0..n {
-            for i in 0..n {
-                let a = (j * (n + 1) + i) as u32;
-                let b = a + 1;
-                let c = a + (n + 1) as u32;
-                let d = c + 1;
-                mesh.add_triangle(a, b, d);
-                mesh.add_triangle(a, d, c);
-            }
-        }
-        ui.painter().add(mesh);
-        ui.painter().rect_stroke(field, 0.0, Stroke::new(1.0, t.separator), StrokeKind::Outside);
-        if (fresp.dragged() || fresp.clicked())
-            && let Some(p) = fresp.interact_pointer_pos()
-        {
-            hsva.s = ((p.x - field.left()) / field.width()).clamp(0.0, 1.0);
-            hsva.v = 1.0 - ((p.y - field.top()) / field.height()).clamp(0.0, 1.0);
-        }
-        let knob = pos2(field.left() + hsva.s * field.width(), field.top() + (1.0 - hsva.v) * field.height());
-        ui.painter().circle_stroke(knob, 5.0, Stroke::new(1.5, Color32::WHITE));
-        ui.painter().circle_stroke(knob, 6.5, Stroke::new(1.0, Color32::from_black_alpha(160)));
-        // Hue strip.
-        let (strip, sresp) = ui.allocate_exact_size(vec2(strip_w, h), Sense::click_and_drag());
-        let mut m2 = egui::Mesh::default();
-        let steps = 24;
-        for k in 0..=steps {
-            let f = k as f32 / steps as f32;
-            let c = Color32::from(egui::ecolor::Hsva::new(1.0 - f, 1.0, 1.0, 1.0));
-            m2.colored_vertex(pos2(strip.left(), strip.top() + f * strip.height()), c);
-            m2.colored_vertex(pos2(strip.right(), strip.top() + f * strip.height()), c);
-        }
-        for k in 0..steps {
-            let a = (k * 2) as u32;
-            m2.add_triangle(a, a + 1, a + 3);
-            m2.add_triangle(a, a + 3, a + 2);
-        }
-        ui.painter().add(m2);
-        if (sresp.dragged() || sresp.clicked())
-            && let Some(p) = sresp.interact_pointer_pos()
-        {
-            hsva.h = 1.0 - ((p.y - strip.top()) / strip.height()).clamp(0.0, 0.9999);
-        }
-        let y = strip.top() + (1.0 - hsva.h) * strip.height();
-        let tri = vec![pos2(strip.right() + 1.0, y), pos2(strip.right() + 6.0, y - 4.0), pos2(strip.right() + 6.0, y + 4.0)];
-        ui.painter().add(egui::Shape::convex_polygon(tri, t.text, Stroke::NONE));
-        if fresp.dragged() || fresp.clicked() || sresp.dragged() || sresp.clicked() {
-            app.session.tools.foreground = hsva_srgb(hsva);
-            ui.data_mut(|d| d.insert_temp(key, hsva.h));
-        }
-    });
-    let [r, g, b, _] = hsva.to_srgba_unmultiplied();
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("#{r:02X}{g:02X}{b:02X}")).font(theme::mono(12.0)).color(t.text));
-        ui.label(RichText::new(format!("R {r}  G {g}  B {b}")).font(theme::mono(11.0)).color(t.text_faint));
-    });
-}
-
-/// Tool colours are sRGB-encoded floats; egui's Hsva works on sRGB bytes via these helpers
-/// (its `from_rgba_unmultiplied` expects *linear* RGB, which gave wrong readouts).
-fn srgb_hsva(c: [f32; 4]) -> egui::ecolor::Hsva {
-    let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-    egui::ecolor::Hsva::from_srgb([q(c[0]), q(c[1]), q(c[2])])
-}
-
-fn hsva_srgb(h: egui::ecolor::Hsva) -> [f32; 4] {
-    let [r, g, b] = h.to_srgb();
-    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
-}
-
 /// Photoshop's brush preset picker chip: a soft/hard round tip preview with the size underneath.
 /// Draw a round brush tip preview (hard core fading to a soft edge).
 fn brush_tip(p: &egui::Painter, c: egui::Pos2, rad: f32, hardness: f32, color: Color32) {
@@ -2361,21 +2228,6 @@ fn gradient_swatch(ui: &mut egui::Ui, a: [f32; 4], b: [f32; 4]) {
     ui.painter().add(mesh);
     ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, t.field_border), StrokeKind::Outside);
     let _ = resp.on_hover_text(tl!("Click to edit the gradient"));
-}
-
-#[cfg(test)]
-mod color_tests {
-    use super::*;
-
-    #[test]
-    fn srgb_hsva_roundtrip() {
-        for c in [[0.847, 0.271, 0.180, 1.0], [0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.2, 0.6, 0.4, 1.0]] {
-            let back = hsva_srgb(srgb_hsva(c));
-            for i in 0..3 {
-                assert!((back[i] - c[i]).abs() <= 1.0 / 255.0, "{c:?} -> {back:?}");
-            }
-        }
-    }
 }
 
 #[cfg(test)]

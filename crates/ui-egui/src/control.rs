@@ -155,6 +155,13 @@ pub fn handle(app: &mut PhotocraftApp, ctx: &egui::Context, req: &ControlRequest
                     Err(e) => return err(e),
                 }
             }
+            // Color panel mode and edited chip (see `color_panel_ui::ColorPanelState`).
+            if let Some(c) = p.get("colorPanel") {
+                match serde_json::from_value(c.clone()) {
+                    Ok(v) => app.ui.color_panel = v,
+                    Err(e) => return err(e),
+                }
+            }
             // Right dock width in points (clamped to the dock's 250..=520 range), applied next frame.
             if let Some(w) = p.get("dockWidth").and_then(Value::as_f64) {
                 crate::panels::request_dock_width(ctx, w as f32);

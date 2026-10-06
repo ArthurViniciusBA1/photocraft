@@ -102,6 +102,7 @@ pub fn load(app: &mut PhotocraftApp) {
         app.ui.status = format!("Preferences were reset: {e}");
     }
     crate::dock::restore(app);
+    crate::color_panel_ui::restore(app);
     app.sync_recent();
     app.prefs_rt.saved_rev = app.session.prefs.rev();
     if app.session.prefs().file_handling.recover_on_launch
