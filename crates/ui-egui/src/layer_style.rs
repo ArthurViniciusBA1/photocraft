@@ -49,6 +49,7 @@ fn spec(kind: &str) -> &'static [(&'static str, &'static str, P)] {
             ("color", "Color", P::Color),
             ("opacity", "Opacity", P::Slider(0.0, 100.0, "%")),
             ("angle", "Angle", P::Slider(-180.0, 180.0, "°")),
+            ("useGlobalLight", "Use Global Light", P::Check),
             ("distance", "Distance", P::Slider(0.0, 300.0, "px")),
             ("spread", "Spread", P::Slider(0.0, 100.0, "%")),
             ("size", "Size", P::Slider(0.0, 250.0, "px")),
@@ -59,6 +60,7 @@ fn spec(kind: &str) -> &'static [(&'static str, &'static str, P)] {
             ("color", "Color", P::Color),
             ("opacity", "Opacity", P::Slider(0.0, 100.0, "%")),
             ("angle", "Angle", P::Slider(-180.0, 180.0, "°")),
+            ("useGlobalLight", "Use Global Light", P::Check),
             ("distance", "Distance", P::Slider(0.0, 300.0, "px")),
             ("choke", "Choke", P::Slider(0.0, 100.0, "%")),
             ("size", "Size", P::Slider(0.0, 250.0, "px")),
@@ -112,6 +114,7 @@ fn spec(kind: &str) -> &'static [(&'static str, &'static str, P)] {
             ("size", "Size", P::Slider(0.0, 250.0, "px")),
             ("soften", "Soften", P::Slider(0.0, 16.0, "px")),
             ("angle", "Angle", P::Slider(-180.0, 180.0, "°")),
+            ("useGlobalLight", "Use Global Light", P::Check),
             ("altitude", "Altitude", P::Slider(0.0, 90.0, "°")),
         ],
         "satin" => &[
@@ -134,8 +137,8 @@ fn spec(kind: &str) -> &'static [(&'static str, &'static str, P)] {
 
 fn defaults(kind: &str) -> Value {
     match kind {
-        "dropShadow" => json!({"blend": "Multiply", "color": "#000000", "opacity": 75, "angle": 120, "distance": 5, "spread": 0, "size": 5, "knocksOut": true}),
-        "innerShadow" => json!({"blend": "Multiply", "color": "#000000", "opacity": 75, "angle": 120, "distance": 5, "choke": 0, "size": 5}),
+        "dropShadow" => json!({"blend": "Multiply", "color": "#000000", "opacity": 75, "angle": 120, "useGlobalLight": true, "distance": 5, "spread": 0, "size": 5, "knocksOut": true}),
+        "innerShadow" => json!({"blend": "Multiply", "color": "#000000", "opacity": 75, "angle": 120, "useGlobalLight": true, "distance": 5, "choke": 0, "size": 5}),
         "outerGlow" => json!({"blend": "Screen", "opacity": 75, "color": "#ffffbe", "spread": 0, "size": 5, "range": 50}),
         "innerGlow" => json!({"blend": "Screen", "opacity": 75, "color": "#ffffbe", "source": "edge", "choke": 0, "size": 5}),
         "stroke" => json!({"size": 3, "position": "outside", "blend": "Normal", "opacity": 100, "color": "#000000"}),
@@ -144,7 +147,7 @@ fn defaults(kind: &str) -> Value {
             json!({"blend": "Normal", "opacity": 100, "from": "#000000", "to": "#ffffff", "reverse": false, "style": "linear", "angle": 90, "scale": 100})
         }
         "patternOverlay" => json!({"blend": "Normal", "opacity": 100, "pattern": "", "angle": 0, "scale": 100, "link": true}),
-        "bevelEmboss" => json!({"style": "inner", "depth": 100, "direction": "up", "size": 5, "soften": 0, "angle": 120, "altitude": 30}),
+        "bevelEmboss" => json!({"style": "inner", "depth": 100, "direction": "up", "size": 5, "soften": 0, "angle": 120, "useGlobalLight": true, "altitude": 30}),
         "satin" => json!({"blend": "Multiply", "color": "#000000", "opacity": 50, "angle": 19, "distance": 11, "size": 14, "invert": true}),
         _ => json!({}),
     }
@@ -171,7 +174,8 @@ fn kind_of(e: &Effect) -> &'static str {
 }
 
 /// Current values of an existing effect, in the command's parameter units.
-fn values_of(e: &Effect) -> Value {
+/// `light` is the document's global light angle: an effect that uses it shows that angle.
+fn values_of(e: &Effect, light: f32) -> Value {
     let mut v = defaults(kind_of(e));
     let set = |v: &mut Value, k: &str, x: Value| {
         v[k] = x;
@@ -181,7 +185,8 @@ fn values_of(e: &Effect) -> Value {
             set(&mut v, "blend", json!(s.common.blend.label()));
             set(&mut v, "opacity", json!((s.common.opacity * 100.0).round()));
             set(&mut v, "color", json!(hex(&s.color)));
-            set(&mut v, "angle", json!(s.angle));
+            set(&mut v, "angle", json!(if s.use_global_light { light } else { s.angle }));
+            set(&mut v, "useGlobalLight", json!(s.use_global_light));
             set(&mut v, "distance", json!(s.distance));
             set(&mut v, if matches!(e, Effect::DropShadow(_)) { "spread" } else { "choke" }, json!((s.spread * 100.0).round()));
             set(&mut v, "size", json!(s.size));
@@ -235,7 +240,8 @@ fn values_of(e: &Effect) -> Value {
             set(&mut v, "depth", json!(b.depth));
             set(&mut v, "size", json!(b.size));
             set(&mut v, "soften", json!(b.soften));
-            set(&mut v, "angle", json!(b.angle));
+            set(&mut v, "angle", json!(if b.use_global_light { light } else { b.angle }));
+            set(&mut v, "useGlobalLight", json!(b.use_global_light));
             set(&mut v, "altitude", json!(b.altitude));
             set(&mut v, "direction", json!(if b.up { "up" } else { "down" }));
         }
@@ -254,7 +260,8 @@ fn values_of(e: &Effect) -> Value {
 }
 
 /// Dialog fields for a layer: selected kind, and per kind {enabled, params}.
-pub fn initial_fields(layer: &Layer, select: Option<&str>) -> Map<String, Value> {
+/// `light` is the document's global light angle, shown by effects that use it.
+pub fn initial_fields(layer: &Layer, select: Option<&str>, light: f32) -> Map<String, Value> {
     let mut f = Map::new();
     f.insert("layer".into(), json!(layer.id.0));
     f.insert(
@@ -268,7 +275,7 @@ pub fn initial_fields(layer: &Layer, select: Option<&str>) -> Map<String, Value>
             first = Some(kind);
         }
         f.insert(format!("on:{kind}"), json!(existing.is_some_and(|e| e.enabled())));
-        f.insert(format!("p:{kind}"), existing.map(values_of).unwrap_or_else(|| defaults(kind)));
+        f.insert(format!("p:{kind}"), existing.map(|e| values_of(e, light)).unwrap_or_else(|| defaults(kind)));
     }
     let sel = select.or(first).unwrap_or("dropShadow");
     f.insert("selected".into(), json!(sel));
@@ -281,7 +288,8 @@ pub fn initial_fields(layer: &Layer, select: Option<&str>) -> Map<String, Value>
 pub fn open(app: &mut PhotocraftApp, select: Option<&str>) -> Option<u64> {
     let st = app.session.active()?;
     let layer = st.doc.layer(st.active_layer?)?.clone();
-    let mut f = initial_fields(&layer, select);
+    let light = st.doc.global_light.angle;
+    let mut f = initial_fields(&layer, select, light);
     f.insert("patternList".into(), pattern_list(app));
     Some(app.ui.open_dialog(crate::state::DialogKind::LayerStyle, f))
 }
@@ -313,12 +321,21 @@ fn apply(f: &Map<String, Value>, mut run: impl FnMut(&str, Value) -> Result<Valu
         run("layer.layerStyle.blendingOptions", p)?;
     }
     let _ = run("layer.layerStyle.clear", json!({"layer": layer}));
+    // An effect lit by the global light follows the document's light angle, so the Angle slider
+    // drives that shared angle (as in Photoshop) rather than the per-effect angle the compositor ignores.
+    let mut light_angle: Option<f64> = None;
     for &(kind, _) in KINDS {
         if f.get(&format!("on:{kind}")).and_then(Value::as_bool) == Some(true) {
             let mut p = f.get(&format!("p:{kind}")).cloned().unwrap_or_else(|| json!({}));
             p["layer"] = layer.clone();
+            if p.get("useGlobalLight").and_then(Value::as_bool) == Some(true) {
+                light_angle = p.get("angle").and_then(Value::as_f64);
+            }
             run(&format!("layer.layerStyle.{kind}"), p)?;
         }
+    }
+    if let Some(angle) = light_angle {
+        run("layer.layerStyle.globalLight", json!({"angle": angle}))?;
     }
     Ok(Value::Null)
 }
@@ -517,7 +534,7 @@ mod tests {
     #[test]
     fn initial_fields_select_requested_kind() {
         let l = Layer::raster("x", photocraft_doc::PixelFormat::RGBA8);
-        let f = initial_fields(&l, Some("stroke"));
+        let f = initial_fields(&l, Some("stroke"), 120.0);
         assert_eq!(f["selected"], "stroke");
         assert_eq!(f["on:stroke"], true);
         assert_eq!(f["on:dropShadow"], false);
@@ -529,7 +546,7 @@ mod tests {
         s.execute("file.new", json!({"width": 16, "height": 16})).unwrap();
         s.execute("layer.new.layer", json!({})).unwrap();
         let st = s.active().unwrap();
-        let mut f = initial_fields(st.doc.layer(st.active_layer.unwrap()).unwrap(), Some("colorOverlay"));
+        let mut f = initial_fields(st.doc.layer(st.active_layer.unwrap()).unwrap(), Some("colorOverlay"), st.doc.global_light.angle);
         let h = preview_hash(&f);
         f.insert("selected".into(), json!("stroke"));
         assert_eq!(preview_hash(&f), h, "switching pages doesn't re-render");
@@ -549,9 +566,50 @@ mod tests {
         s.execute("layer.layerStyle.dropShadow", json!({"spread": 12, "add": true})).unwrap();
         let st = s.active().unwrap();
         let l = st.doc.layer(st.active_layer.unwrap()).unwrap();
-        let f = initial_fields(l, None);
+        let f = initial_fields(l, None, st.doc.global_light.angle);
         assert_eq!(f["p:outerGlow"]["spread"], json!(6.0));
         assert_eq!(f["p:outerGlow"]["range"], json!(40.0));
         assert_eq!(f["p:dropShadow"]["spread"], json!(12.0));
+    }
+
+    #[test]
+    fn drop_shadow_angle_reaches_the_effect() {
+        // #350: the Angle slider was dead — the dialog never sent `useGlobalLight`, so the engine
+        // defaulted it to true and the compositor used the fixed global light angle, ignoring the slider.
+        let mut s = photocraft_engine::Session::new();
+        s.execute("file.new", json!({"width": 64, "height": 64})).unwrap();
+        s.execute("layer.new.layer", json!({})).unwrap();
+        let id = s.active().unwrap().active_layer.unwrap();
+        let shadow = |s: &photocraft_engine::Session| {
+            s.active().unwrap().doc.layer(id).unwrap().effects.items.iter().find_map(|e| match e {
+                Effect::DropShadow(sh) => Some(sh.clone()),
+                _ => None,
+            })
+        };
+
+        // Use Global Light off: the per-effect angle is stored and used.
+        let mut f = Map::new();
+        f.insert("layer".into(), json!(id));
+        f.insert("on:dropShadow".into(), json!(true));
+        f.insert("p:dropShadow".into(), json!({"angle": 45.0, "useGlobalLight": false, "distance": 5, "size": 5}));
+        apply(&f, |cmd, p| s.execute(cmd, p).map_err(|e| e.to_string())).unwrap();
+        let eff = shadow(&s).unwrap();
+        assert!(!eff.use_global_light, "Use Global Light off keeps the per-effect angle");
+        assert_eq!(eff.angle, 45.0);
+
+        // Use Global Light on: the Angle slider drives the document's shared light angle.
+        let mut f = Map::new();
+        f.insert("layer".into(), json!(id));
+        f.insert("on:dropShadow".into(), json!(true));
+        f.insert("p:dropShadow".into(), json!({"angle": 30.0, "useGlobalLight": true, "distance": 5, "size": 5}));
+        apply(&f, |cmd, p| s.execute(cmd, p).map_err(|e| e.to_string())).unwrap();
+        assert_eq!(s.active().unwrap().doc.global_light.angle, 30.0, "the Angle slider moves the shared light");
+        assert!(shadow(&s).unwrap().use_global_light);
+
+        // Reopening the dialog shows the effective angle and the checkbox state.
+        let st = s.active().unwrap();
+        let f = initial_fields(st.doc.layer(id).unwrap(), None, st.doc.global_light.angle);
+        assert_eq!(f["p:dropShadow"]["useGlobalLight"], json!(true));
+        assert_eq!(f["p:dropShadow"]["angle"], json!(30.0));
     }
 }
