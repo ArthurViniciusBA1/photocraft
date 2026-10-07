@@ -320,6 +320,41 @@ fn write_failures_are_warnings() {
     let _ = std::fs::remove_file(&dir.0);
 }
 
+/// A store whose folder doesn't exist yet: nothing is listed and every read fails the way Windows
+/// reports a file in a missing folder (os error 3, not "not found").
+struct NoFolder;
+
+impl PresetBackend for NoFolder {
+    fn list(&self) -> Result<Vec<(String, u64)>, String> {
+        Ok(Vec::new())
+    }
+    fn read(&self, name: &str, _max: u64) -> Result<Vec<u8>, String> {
+        Err(format!("{name}: The system cannot find the path specified. (os error 3)"))
+    }
+    fn write(&self, _name: &str, _bytes: &[u8]) -> Result<(), String> {
+        Ok(())
+    }
+    fn remove(&self, _name: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[test]
+fn a_store_folder_that_does_not_exist_yet_loads_without_warnings() {
+    // A fresh install: the folder appears on the first save, so opening must not warn.
+    let o = open(Box::new(NoFolder));
+    assert!(o.warnings.is_empty() && o.actions.is_empty(), "{:?}", o.warnings);
+    let dir = TempDir::new("fresh");
+    let o = open_dir(dir.0.join("not").join("yet"));
+    assert!(o.warnings.is_empty(), "{:?}", o.warnings);
+
+    // An unreadable actions file that is there is still reported.
+    let mem = MemBackend::default();
+    mem.files.lock().unwrap().insert(ACTIONS_FILE.into(), b"{".to_vec());
+    let o = open(Box::new(mem));
+    assert!(o.warnings.iter().any(|w| w.contains(ACTIONS_FILE)), "{:?}", o.warnings);
+}
+
 #[test]
 fn backends_refuse_paths_outside_the_store() {
     let mem = MemBackend::default();

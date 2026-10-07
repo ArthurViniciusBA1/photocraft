@@ -425,7 +425,10 @@ pub fn open(backend: Box<dyn PresetBackend>) -> Opened {
         warnings.push(format!("brush presets: {e}"));
         Vec::new()
     });
-    let index: Option<IndexFile> = if files.iter().any(|(n, _)| n == INDEX_FILE) {
+    // Optional files are read only when listed: what a read of a missing file (or of a file in a
+    // store folder that doesn't exist yet) reports differs per platform and backend.
+    let listed = |name: &str| files.iter().any(|(n, _)| n == name);
+    let index: Option<IndexFile> = if listed(INDEX_FILE) {
         match backend.read(INDEX_FILE, MAX_INDEX_BYTES).and_then(|b| serde_json::from_slice(&b).map_err(|e| e.to_string())) {
             Ok(i) => Some(i),
             Err(e) => {
@@ -489,7 +492,7 @@ pub fn open(backend: Box<dyn PresetBackend>) -> Opened {
         }
     }
 
-    let actions = load_actions(backend.as_ref(), &mut warnings);
+    let actions = if listed(ACTIONS_FILE) { load_actions(backend.as_ref(), &mut warnings) } else { Vec::new() };
     let mut store = PresetStore { backend, synced_rev: None, groups: HashMap::new(), tips: HashMap::new(), index: None, actions_rev: 0, warnings: Vec::new() };
     let mut presets = Vec::new();
     for (file, size, g) in parsed {
@@ -532,11 +535,10 @@ pub fn open(backend: Box<dyn PresetBackend>) -> Opened {
     Opened { store, presets, hidden_builtins, order, warnings, actions }
 }
 
-/// `actions.json`: a missing file is an empty list. Anything else unreadable is a warning.
+/// `actions.json`, read when the store lists it. Anything unreadable is a warning.
 fn load_actions(backend: &dyn PresetBackend, warnings: &mut Vec<String>) -> Vec<crate::actions_cmds::Action> {
     let bytes = match backend.read(ACTIONS_FILE, MAX_ACTIONS_BYTES) {
         Ok(b) => b,
-        Err(e) if missing_file(&e) => return Vec::new(),
         Err(e) => {
             warnings.push(format!("actions: {ACTIONS_FILE} skipped: {e}"));
             return Vec::new();
@@ -553,11 +555,6 @@ fn load_actions(backend: &dyn PresetBackend, warnings: &mut Vec<String>) -> Vec<
             Vec::new()
         }
     }
-}
-
-fn missing_file(err: &str) -> bool {
-    let lower = err.to_ascii_lowercase();
-    lower.contains("not found") || lower.contains("no such file") || lower.contains("os error 2")
 }
 
 /// Read and decode tips, in parallel on native targets.
