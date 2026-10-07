@@ -1760,7 +1760,10 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
                         egui::CursorIcon::ZoomIn
                     }
                 }
-                Tool::Type => egui::CursorIcon::Text,
+                Tool::Type => {
+                    let d = xf.to_doc(p);
+                    crate::type_tool::handle_cursor(app, d[0], d[1]).unwrap_or(egui::CursorIcon::Text)
+                }
                 _ => egui::CursorIcon::Crosshair,
             };
             ui.ctx().set_cursor_icon(icon);

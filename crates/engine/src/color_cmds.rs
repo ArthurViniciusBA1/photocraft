@@ -243,7 +243,7 @@ impl ColorState {
         let embedded = doc.icc_profile.as_ref().and_then(|b| profile_from_bytes(b).ok()).filter(|p| p.color_space == space);
         match embedded {
             Some(emb) => {
-                // Compared by colour, not bytes: Photoshop's sRGB IEC61966-2.1 is our working sRGB.
+                // Compared by colour, not bytes: an embedded v2 sRGB IEC61966-2.1 is our working sRGB.
                 let mismatch = !emb.same_colors(&working);
                 let base = json!({"embedded": emb.description, "working": working.description, "mismatch": mismatch, "policy": policy.id()});
                 // 32-bit linear images (EXR/HDR are tagged linear sRGB on import) stay linear, as
@@ -1235,7 +1235,7 @@ mod settings_tests {
         // Matching profiles never ask.
         let (_, r) = s.open_document(tagged("srgb"), None);
         assert_eq!(r["mismatch"], false);
-        // Nor does the same space in other bytes: sRGB as Photoshop embeds it (v2, 1024-entry
+        // Nor does the same space in other bytes: sRGB as files commonly embed it (v2, 1024-entry
         // tables) is the working sRGB, even under Convert, and the file keeps its own profile.
         s.execute("edit.colorSettings", json!({"policyRgb": "convert"})).unwrap();
         let mut v2 = Builtin::Srgb.profile().clone();
@@ -1250,7 +1250,7 @@ mod settings_tests {
         let (_, r) = s.open_document(d, None);
         assert_eq!((r["action"].as_str(), r["mismatch"].as_bool(), r.get("ask")), (Some("kept"), Some(false), None));
         assert_eq!(s.active().unwrap().doc.icc_profile.as_ref(), Some(&bytes));
-        // A 32-bit document in Photoshop's linear sRGB (a v2 profile recording the D65 display
+        // A 32-bit document in an editor's linear sRGB (a v2 profile recording the D65 display
         // white) stays linear without asking, like one tagged with our own linear sRGB.
         let mut lin = Builtin::LinearSrgb.profile().clone();
         lin.version = (2, 0x10);

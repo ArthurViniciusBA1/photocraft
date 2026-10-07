@@ -150,6 +150,21 @@ fn box_handle_at(app: &mut PhotocraftApp, id: LayerId, x: f64, y: f64) -> Option
         .map(|i| i as u8)
 }
 
+/// The resize cursor over a handle of the paragraph box being edited (or while one is dragged),
+/// pointing along the edges it moves (#351); `None` elsewhere, where the Type tool keeps its
+/// I-beam. Handles are numbered as in [`box_handle_at`].
+pub fn handle_cursor(app: &mut PhotocraftApp, x: f64, y: f64) -> Option<egui::CursorIcon> {
+    let ed = app.ui.text_edit.as_ref()?;
+    let (layer, dragged) = (LayerId(ed.layer), ed.resize);
+    let i = dragged.or_else(|| box_handle_at(app, layer, x, y))?;
+    Some(match i {
+        0 | 2 => egui::CursorIcon::ResizeNwSe,
+        1 | 3 => egui::CursorIcon::ResizeNeSw,
+        4 | 6 => egui::CursorIcon::ResizeVertical,
+        _ => egui::CursorIcon::ResizeHorizontal,
+    })
+}
+
 /// Drag handle `i` to the document point: the dragged edges follow it, the others stay put.
 fn resize_box(app: &mut PhotocraftApp, ed: &TextEdit, i: u8, x: f64, y: f64) {
     let id = LayerId(ed.layer);
@@ -1408,6 +1423,32 @@ mod tests {
         pointer_move(&mut app, 0.0, 99.0);
         pointer_up(&mut app, [110.0, 45.0], [0.0, 99.0]);
         assert_eq!(box_shape(&app, id), Some((0.0, 0.0, MIN_BOX, 30.0)));
+    }
+
+    /// #351: over a box handle the pointer shows which way the drag resizes; inside the box it
+    /// stays the I-beam, and outside an edit session there are no handles.
+    #[test]
+    fn box_handles_show_resize_cursors() {
+        use egui::CursorIcon::{ResizeHorizontal, ResizeNeSw, ResizeNwSe, ResizeVertical};
+        let mut app = app();
+        assert_eq!(handle_cursor(&mut app, 10.0, 10.0), None, "no edit session");
+        pointer_up(&mut app, [10.0, 10.0], [110.0, 60.0]);
+        for ((x, y), want) in [
+            ((10.0, 10.0), ResizeNwSe),
+            ((110.0, 10.0), ResizeNeSw),
+            ((110.0, 60.0), ResizeNwSe),
+            ((10.0, 60.0), ResizeNeSw),
+            ((60.0, 10.0), ResizeVertical),
+            ((110.0, 35.0), ResizeHorizontal),
+            ((60.0, 60.0), ResizeVertical),
+            ((10.0, 35.0), ResizeHorizontal),
+        ] {
+            assert_eq!(handle_cursor(&mut app, x, y), Some(want), "handle at ({x}, {y})");
+        }
+        assert_eq!(handle_cursor(&mut app, 60.0, 35.0), None, "inside the box: the I-beam");
+        // While a handle is dragged the cursor stays with it, wherever the pointer is.
+        assert!(pointer_down(&mut app, 110.0, 35.0, false));
+        assert_eq!(handle_cursor(&mut app, 500.0, 500.0), Some(ResizeHorizontal));
     }
 
     #[test]
