@@ -744,6 +744,7 @@
 	Amount	總量
 	Anchor:	錨點：
 	Angle	角度
+	Use Global Light	使用全域光源
 	Angle Gradient	角度漸層
 	Angle Jitter	角度快速變換
 	Answer the unsaved-changes prompt first	請先回應未儲存變更的提示

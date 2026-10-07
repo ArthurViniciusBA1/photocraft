@@ -741,6 +741,7 @@
 	Amount	数量
 	Anchor:	定位点：
 	Angle	角度
+	Use Global Light	使用全局光源
 	Angle Gradient	角度渐变
 	Angle Jitter	角度抖动
 	Answer the unsaved-changes prompt first	请先处理未保存更改的提示

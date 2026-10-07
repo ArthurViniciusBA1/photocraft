@@ -137,8 +137,12 @@ fn spec(kind: &str) -> &'static [(&'static str, &'static str, P)] {
 
 fn defaults(kind: &str) -> Value {
     match kind {
-        "dropShadow" => json!({"blend": "Multiply", "color": "#000000", "opacity": 75, "angle": 120, "useGlobalLight": true, "distance": 5, "spread": 0, "size": 5, "knocksOut": true}),
-        "innerShadow" => json!({"blend": "Multiply", "color": "#000000", "opacity": 75, "angle": 120, "useGlobalLight": true, "distance": 5, "choke": 0, "size": 5}),
+        "dropShadow" => {
+            json!({"blend": "Multiply", "color": "#000000", "opacity": 75, "angle": 120, "useGlobalLight": true, "distance": 5, "spread": 0, "size": 5, "knocksOut": true})
+        }
+        "innerShadow" => {
+            json!({"blend": "Multiply", "color": "#000000", "opacity": 75, "angle": 120, "useGlobalLight": true, "distance": 5, "choke": 0, "size": 5})
+        }
         "outerGlow" => json!({"blend": "Screen", "opacity": 75, "color": "#ffffbe", "spread": 0, "size": 5, "range": 50}),
         "innerGlow" => json!({"blend": "Screen", "opacity": 75, "color": "#ffffbe", "source": "edge", "choke": 0, "size": 5}),
         "stroke" => json!({"size": 3, "position": "outside", "blend": "Normal", "opacity": 100, "color": "#000000"}),
@@ -147,7 +151,9 @@ fn defaults(kind: &str) -> Value {
             json!({"blend": "Normal", "opacity": 100, "from": "#000000", "to": "#ffffff", "reverse": false, "style": "linear", "angle": 90, "scale": 100})
         }
         "patternOverlay" => json!({"blend": "Normal", "opacity": 100, "pattern": "", "angle": 0, "scale": 100, "link": true}),
-        "bevelEmboss" => json!({"style": "inner", "depth": 100, "direction": "up", "size": 5, "soften": 0, "angle": 120, "useGlobalLight": true, "altitude": 30}),
+        "bevelEmboss" => {
+            json!({"style": "inner", "depth": 100, "direction": "up", "size": 5, "soften": 0, "angle": 120, "useGlobalLight": true, "altitude": 30})
+        }
         "satin" => json!({"blend": "Multiply", "color": "#000000", "opacity": 50, "angle": 19, "distance": 11, "size": 14, "invert": true}),
         _ => json!({}),
     }
@@ -264,6 +270,9 @@ fn values_of(e: &Effect, light: f32) -> Value {
 pub fn initial_fields(layer: &Layer, select: Option<&str>, light: f32) -> Map<String, Value> {
     let mut f = Map::new();
     f.insert("layer".into(), json!(layer.id.0));
+    // The light angle the dialog opened with: Apply moves the shared light only to an angle the
+    // user changed (see `apply`).
+    f.insert("globalLight".into(), json!(light));
     f.insert(
         format!("p:{BLENDING}"),
         json!({"blend": layer.blend.label(), "opacity": (layer.opacity * 100.0).round(), "fillOpacity": (layer.fill_opacity * 100.0).round()}),
@@ -321,15 +330,22 @@ fn apply(f: &Map<String, Value>, mut run: impl FnMut(&str, Value) -> Result<Valu
         run("layer.layerStyle.blendingOptions", p)?;
     }
     let _ = run("layer.layerStyle.clear", json!({"layer": layer}));
-    // An effect lit by the global light follows the document's light angle, so the Angle slider
-    // drives that shared angle (as in Photoshop) rather than the per-effect angle the compositor ignores.
+    // An effect lit by the global light follows the document's light angle, so its Angle slider
+    // drives that shared angle rather than the per-effect angle the compositor ignores. Several
+    // effects show the same shared angle: the one the user changed wins (the others still show the
+    // angle the dialog opened with), and an unchanged angle adds no history step.
+    let opened = f.get("globalLight").and_then(Value::as_f64);
     let mut light_angle: Option<f64> = None;
     for &(kind, _) in KINDS {
         if f.get(&format!("on:{kind}")).and_then(Value::as_bool) == Some(true) {
             let mut p = f.get(&format!("p:{kind}")).cloned().unwrap_or_else(|| json!({}));
             p["layer"] = layer.clone();
-            if p.get("useGlobalLight").and_then(Value::as_bool) == Some(true) {
-                light_angle = p.get("angle").and_then(Value::as_f64);
+            if p.get("useGlobalLight").and_then(Value::as_bool) == Some(true)
+                && let Some(angle) = p.get("angle").and_then(Value::as_f64)
+                && light_angle.is_none()
+                && opened.is_none_or(|o| (o - angle).abs() > 1e-6)
+            {
+                light_angle = Some(angle);
             }
             run(&format!("layer.layerStyle.{kind}"), p)?;
         }
@@ -611,5 +627,37 @@ mod tests {
         let f = initial_fields(st.doc.layer(id).unwrap(), None, st.doc.global_light.angle);
         assert_eq!(f["p:dropShadow"]["useGlobalLight"], json!(true));
         assert_eq!(f["p:dropShadow"]["angle"], json!(30.0));
+    }
+
+    #[test]
+    fn the_changed_global_light_angle_wins_and_an_unchanged_one_adds_no_step() {
+        let mut s = photocraft_engine::Session::new();
+        s.execute("file.new", json!({"width": 64, "height": 64})).unwrap();
+        s.execute("layer.new.layer", json!({})).unwrap();
+        s.execute("edit.fill", json!({"color": "#808080"})).unwrap();
+        let fields = |s: &photocraft_engine::Session| {
+            let st = s.active().unwrap();
+            let mut f = initial_fields(st.doc.layer(st.active_layer.unwrap()).unwrap(), Some("bevelEmboss"), st.doc.global_light.angle);
+            f.insert("on:bevelEmboss".into(), json!(true));
+            f.insert("on:dropShadow".into(), json!(true));
+            f
+        };
+        let light = |s: &photocraft_engine::Session| s.active().unwrap().doc.global_light.angle;
+        let (start, before) = (light(&s), s.active().unwrap().history.past_len());
+        // Bevel & Emboss is applied first, Drop Shadow last: a change to the Bevel's angle used to
+        // be overwritten by the Drop Shadow's unchanged one.
+        let mut f = fields(&s);
+        f.get_mut("p:bevelEmboss").unwrap()["angle"] = json!(45.0);
+        apply(&f, |cmd, p| s.execute(cmd, p).map_err(|e| e.to_string())).unwrap();
+        assert_eq!(light(&s), 45.0);
+        // Re-applying without touching any angle leaves the light (and its history step) alone.
+        let light_steps = |s: &photocraft_engine::Session| s.active().unwrap().history.entries().iter().filter(|e| *e == "Global Light").count();
+        let (lights, steps) = (light_steps(&s), s.active().unwrap().history.past_len());
+        assert_eq!(lights, 1);
+        let f = fields(&s);
+        apply(&f, |cmd, p| s.execute(cmd, p).map_err(|e| e.to_string())).unwrap();
+        assert_eq!(light(&s), 45.0);
+        assert_eq!(light_steps(&s), 1, "no second Global Light step");
+        assert!(before < steps && start != 45.0);
     }
 }

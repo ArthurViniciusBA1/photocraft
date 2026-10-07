@@ -738,6 +738,7 @@
 	Amount	Cantidad
 	Anchor:	Anclaje:
 	Angle	Ángulo
+	Use Global Light	Usar luz global
 	Angle Gradient	Degradado angular
 	Angle Jitter	Variación de ángulo
 	Answer the unsaved-changes prompt first	Responda primero al aviso de cambios sin guardar

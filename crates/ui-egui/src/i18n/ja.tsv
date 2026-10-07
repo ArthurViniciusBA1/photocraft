@@ -743,6 +743,7 @@
 	Amount	量
 	Anchor:	基準位置:
 	Angle	角度
+	Use Global Light	グローバルライトを使用
 	Angle Gradient	円錐形グラデーション
 	Angle Jitter	角度のジッター
 	Answer the unsaved-changes prompt first	先に未保存の変更の確認に答えてください
