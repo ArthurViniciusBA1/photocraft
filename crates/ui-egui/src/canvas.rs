@@ -935,8 +935,25 @@ pub(crate) fn retain_gpu_documents(app: &mut PhotocraftApp) {
     }
 }
 
-/// Tabs + canvas for the active document, or the start screen.
+/// Tabs + canvas for the active document, or the start screen; then drops layers dragged onto
+/// another document (`layer_transfer`).
 pub fn document_area(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
+    documents(app, ui);
+    crate::layer_transfer::finish(app, ui.ctx());
+}
+
+/// Window › Arrange tiles: each document shown with its tile in `rect`, or `None` when the
+/// active document fills the area.
+pub(crate) fn arranged_cells(app: &PhotocraftApp, rect: Rect) -> Option<Vec<(usize, Rect)>> {
+    let idx = app.session.active_index()?;
+    let n = app.session.documents().len();
+    let cells = crate::view_cmds::cells(&app.ui.view.arrange, rect, n)?;
+    let mut shown: Vec<(usize, Rect)> = (0..n).map(|k| (idx + k) % n).zip(cells).collect();
+    shown.sort_by_key(|(d, _)| *d);
+    Some(shown)
+}
+
+fn documents(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     retain_gpu_documents(app);
     crate::transform_tool::track_steps(app, ui.ctx());
     let n = app.session.documents().len();
@@ -961,13 +978,9 @@ pub fn document_area(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let Some(idx) = app.session.active_index() else { return };
     let rect = ui.available_rect_before_wrap();
     app.last_canvas_rect = rect;
-    let n = app.session.documents().len();
     // Window › Arrange: tiled / n-up layouts show several documents side by side; the active one
     // takes input, a click elsewhere activates that document.
-    if let Some(cells) = crate::view_cmds::cells(&app.ui.view.arrange, rect, n) {
-        let order: Vec<usize> = (0..n).map(|k| (idx + k) % n).collect();
-        let mut shown: Vec<(usize, Rect)> = order.into_iter().zip(cells).collect();
-        shown.sort_by_key(|(d, _)| *d);
+    if let Some(shown) = arranged_cells(app, rect) {
         let t = crate::theme::Tokens::get(ui.ctx());
         for (d, cell) in shown {
             let cell = cell.shrink(1.0);
@@ -1000,6 +1013,9 @@ fn tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let tab_count = app.session.documents().len();
     let (mut focus_open, mut cancel_open) = (None, None);
     let focused_open = app.jobs.focus.is_some();
+    // Layers dragged over a tab show its document (`layer_transfer`).
+    let dragging = crate::layer_transfer::pointer_if_armed(app, ui.ctx());
+    let mut drag_over = None;
     egui::Frame::NONE.fill(t.canvas).inner_margin(egui::Margin { left: 8, right: 8, top: 6, bottom: 4 }).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
@@ -1011,11 +1027,16 @@ fn tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 let meta_g = ui.painter().layout_no_wrap(meta, egui::FontId::proportional(10.5), t.text_faint);
                 let w = name_g.size().x + meta_g.size().x + 44.0;
                 let (r, resp) = ui.allocate_exact_size(egui::vec2(w, 26.0), Sense::click());
+                resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, sel, &st.doc.name));
                 if sel {
                     ui.painter().rect_filled(r, t.radius_sm, t.card);
                     ui.painter().rect_stroke(r, t.radius_sm, Stroke::new(1.0, t.card_border), egui::StrokeKind::Inside);
                 } else if resp.hovered() {
                     ui.painter().rect_filled(r, t.radius_sm, t.hover.gamma_multiply(0.5));
+                }
+                if dragging.is_some_and(|p| r.contains(p)) {
+                    drag_over = Some(i);
+                    ui.painter().rect_stroke(r, t.radius_sm, Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
                 }
                 let color = if sel { t.text } else { t.text_dim };
                 let ny = r.center().y - name_g.size().y / 2.0;
@@ -1068,6 +1089,9 @@ fn tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         });
     });
     open_tab_clicks(app, activate, focus_open, cancel_open);
+    if let Some(i) = drag_over {
+        crate::layer_transfer::over_tab(app, ui.ctx(), i);
+    }
     if let Some(i) = close {
         let _ = crate::menus::invoke(app, ui.ctx(), "file.close", json!({"document": i}));
     }
@@ -1127,6 +1151,8 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let (mut activate, mut close) = (None, None);
     let mut tab_action = None;
     let tab_count = app.session.documents().len();
+    let dragging = crate::layer_transfer::pointer_if_armed(app, ui.ctx());
+    let mut drag_over = None;
     let (strip, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 26.0), Sense::hover());
     ui.painter().rect_filled(strip, 0.0, t.tab_strip);
     let mut x = strip.left();
@@ -1144,10 +1170,15 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         let r = Rect::from_min_size(egui::pos2(x, strip.top()), egui::vec2(g.size().x + 42.0, strip.height()));
         let resp = ui.interact(r, ui.id().with(("ptab", i)), Sense::click());
         let sel = Some(i) == active;
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, sel, &st.doc.name));
         if sel {
             ui.painter().rect_filled(r, 0.0, t.chrome);
         } else if resp.hovered() {
             ui.painter().rect_filled(r, 0.0, t.hover.gamma_multiply(0.35));
+        }
+        if dragging.is_some_and(|p| r.contains(p)) {
+            drag_over = Some(i);
+            ui.painter().rect_stroke(r, 0.0, Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
         }
         ui.painter().line_segment([r.right_top(), r.right_bottom()], Stroke::new(1.0, t.separator));
         let xr = Rect::from_center_size(egui::pos2(r.left() + 13.0, r.center().y), egui::vec2(14.0, 14.0));
@@ -1191,6 +1222,9 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         x = r.right();
     }
     open_tab_clicks(app, activate, focus_open, cancel_open);
+    if let Some(i) = drag_over {
+        crate::layer_transfer::over_tab(app, ui.ctx(), i);
+    }
     if let Some(i) = close {
         let _ = crate::menus::invoke(app, ui.ctx(), "file.close", json!({"document": i}));
     }
