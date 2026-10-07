@@ -604,6 +604,10 @@ impl Session {
         if let Some(why) = self.job_conflict(id, spec.journal) {
             return Err(EngineError::Disabled(id.to_string(), why));
         }
+        // Painting on or moving a hidden layer is refused, as in Photoshop (#571).
+        if let Some(why) = crate::hidden_target::refusal(self, id, &params) {
+            return Err(EngineError::Other(why.into()));
+        }
         self.coalesce_request = params.get("coalesce").and_then(Value::as_str).map(str::to_string);
         // Pixel commands follow the Channels panel target unless the caller names one.
         let run_params = crate::channel_cmds::inject_target(self, id, crate::commands::inject_kind(id, params.clone()));
