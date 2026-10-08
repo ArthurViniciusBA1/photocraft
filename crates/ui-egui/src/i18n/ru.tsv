@@ -1234,6 +1234,7 @@
 	Urgency	Срочность
 	High	Высокая
 	Normal	Обычная
+	Lossless	Без потерь
 	Low	Низкая
 	Category	Категория
 	Supplemental Categories	Дополнительные категории
@@ -2367,3 +2368,38 @@ cameraRaw	Roughness	Неровность
 	Save failed: {error}	Не удалось сохранить: {error}
 	Save cancelled	Сохранение отменено
 	Couldn't place {name}: {error}	Не удалось поместить {name}: {error}
+	Magnetic Lasso Tool	Магнитное лассо
+	Frequency	Частота
+	Use tablet pressure to change pen width	Использовать нажим планшета для изменения ширины пера
+
+# About ▸ Contributors / Models (credits, craftrules standards/contributors.md)
+	About	О программе
+	Contributors	Участники
+	Models	Модели
+	Sort	Сортировка
+	Username	Имя пользователя
+	Display name	Отображаемое имя
+	Real name	Настоящее имя
+	Reverse the order	Обратный порядок
+	Grab bag	Списком
+	Table	Таблица
+	Name (A–Z)	Имя (А–Я)
+	Merged PRs	Принятые PR
+	Commits	Коммиты
+	Lines added	Добавлено строк
+	Lines deleted	Удалено строк
+	Line delta	Разница строк
+	Binary assets added	Добавлено двоичных файлов
+	Binary assets removed	Удалено двоичных файлов
+	First commit	Первый коммит
+	First	Первый
+	Last commit	Последний коммит
+	Last	Последний
+	Contributors: {contributors} · Commits: {commits}	Участники: {contributors} · Коммиты: {commits}
+	No contributor data was built into this copy.	В эту копию не встроены данные об участниках.
+	No model credits were built into this copy.	В эту копию не встроены сведения о моделях.
+	Company	Компания
+	Version	Версия
+	% of all commits	% от всех коммитов
+	Lines +/−	Строки +/−
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{binAdded} / −{binDeleted} binary assets, {first} – {last}	@{login}: PR: {prs}, коммиты: {commits}, строки +{added} / −{deleted} (Δ {delta}), двоичные файлы +{binAdded} / −{binDeleted}, {first} – {last}
