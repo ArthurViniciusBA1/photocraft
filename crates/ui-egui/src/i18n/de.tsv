@@ -1780,6 +1780,7 @@
 	Light gray	Hellgrau
 	Line	Linie
 	Lines	Linien
+	Lossless	Verlustfrei
 	Lowercase extension	Dateinamenserweiterung in Kleinschreibung
 	Maximize psd compatibility	PSD-Kompatibilität maximieren
 	Medium gray	Mittelgrau
@@ -2131,3 +2132,6 @@
 	Reset to Default	Auf Standard zurücksetzen
 	Couldn't place {name}: {error}	{name} konnte nicht platziert werden: {error}
 	Full-resolution preview unavailable	Vorschau in voller Auflösung nicht verfügbar
+	Magnetic Lasso Tool	Magnetisches-Lasso-Werkzeug
+	Frequency	Frequenz
+	Use tablet pressure to change pen width	Tablettdruck zum Ändern der Stiftbreite verwenden
