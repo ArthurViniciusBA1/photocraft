@@ -213,7 +213,11 @@ pub(crate) fn encode(doc: &Document, path: &str, save: impl Into<SaveOpts>) -> R
     let save = save.into();
     let mut opts = photocraft_io::ExportOptions { tiff_layers: save.tiff_layers, ..Default::default() };
     if let Some(q) = save.quality {
-        opts.encode.jpeg_quality = (q.clamp(0.0, 12.0) / 12.0 * 99.0 + 1.0).round() as u8;
+        let q = (q.clamp(0.0, 12.0) / 12.0 * 99.0 + 1.0).round() as u8;
+        opts.encode.jpeg_quality = q;
+        // A quality on a WebP save asks for the lossy encoder; the default WebP stays lossless.
+        opts.encode.webp_quality = q;
+        opts.encode.webp_lossless = false;
     }
     photocraft_io::export(doc, path, &opts).map(|r| (r.bytes, r.warnings)).map_err(|e| EngineError::Other(format!("{path}: {e}")))
 }
@@ -351,6 +355,9 @@ fn open_as(s: &mut Session, p: &Value) -> Result<Value> {
 
 // ---------- place ----------
 
+/// History label of an embedded place.
+pub const PLACE_EMBEDDED: &str = "Place Embedded";
+
 /// Place a file's bytes as a smart object layer, centred and (when larger than the canvas)
 /// scaled down to fit, like Photoshop's Place with "Resize Image During Place". `linked` makes it
 /// a linked smart object that refers to that path instead of embedding the bytes.
@@ -381,7 +388,7 @@ pub fn place_bytes(s: &mut Session, name: &str, bytes: Vec<u8>, linked: Option<S
     };
     let so = SmartObject::new(source, Affine { m: [scale, 0.0, 0.0, scale, dx, dy] }, Some(px));
     let layer_name = stem(name);
-    let label = if matches!(so.source, SmartSource::Linked { .. }) { "Place Linked" } else { "Place Embedded" };
+    let label = if matches!(so.source, SmartSource::Linked { .. }) { "Place Linked" } else { PLACE_EMBEDDED };
     let id = s.edit(label, |doc, active| {
         let id = doc.insert_above(*active, Layer::new(layer_name, LayerContent::Smart(so)));
         *active = Some(id);

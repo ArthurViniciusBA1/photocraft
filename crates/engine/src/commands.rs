@@ -62,8 +62,10 @@ pub(crate) fn has_paintable(s: &Session) -> std::result::Result<(), String> {
 }
 
 /// Surface a paint command writes to: the layer's pixels, or its mask with `"target":"mask"`.
-pub(crate) fn paint_surface<'a>(l: &'a mut Layer, p: &Value) -> Result<&'a mut photocraft_raster::Surface> {
-    if !is_mask_target(p) && (l.locks.pixels || l.locks.all) {
+pub(crate) fn paint_surface<'a>(doc: &'a mut Document, id: LayerId, p: &Value) -> Result<&'a mut photocraft_raster::Surface> {
+    let locks = doc.effective_locks(id);
+    let l = doc.layer_mut(id).ok_or(EngineError::NoLayer(id))?;
+    if !is_mask_target(p) && (locks.pixels || locks.all) {
         return Err(EngineError::Other(format!("Could not complete your request because the layer \"{}\" is locked", l.name)));
     }
     if is_mask_target(p) {
@@ -702,6 +704,8 @@ fn build() -> Vec<CommandSpec> {
                         sib.insert(at.min(sib.len()), layer);
                     }
                 }
+                // Moving a group into (or beside) a deeply nested layer can pass the nesting cap.
+                crate::layer_multi_cmds::check_group_depth(doc, "Reorder Layer")?;
                 *active = Some(id);
                 Ok(())
             })?;
@@ -805,6 +809,28 @@ fn build() -> Vec<CommandSpec> {
             run: |s, p| {
                 let i = p.get("document").and_then(Value::as_u64).ok_or_else(|| bad("document.activate", "missing `document`"))?;
                 if s.set_active(i as usize) { Ok(Value::Null) } else { Err(EngineError::NoDocument) }
+            },
+            journal: false,
+        },
+        CommandSpec {
+            id: "document.move",
+            label: "Move Document",
+            menu: &[],
+            shortcut: None,
+            params: r##"{"document":index?,"to":index}"##,
+            enabled: has_doc,
+            run: |s, p| {
+                let index = |key: &str| {
+                    p.get(key)
+                        .map(|v| v.as_u64().and_then(|v| usize::try_from(v).ok()).ok_or_else(|| bad("document.move", format!("`{key}` must be a tab index"))))
+                };
+                let from = match index("document") {
+                    Some(i) => i?,
+                    None => s.active_index().ok_or(EngineError::NoDocument)?,
+                };
+                let to = index("to").ok_or_else(|| bad("document.move", "missing `to`"))??;
+                let to = s.move_document(from, to).ok_or(EngineError::NoDocument)?;
+                Ok(json!({"document": to}))
             },
             journal: false,
         },
@@ -967,6 +993,7 @@ fn build() -> Vec<CommandSpec> {
     v.extend(crate::retouch_cmds::specs());
     v.extend(crate::image_cmds::specs());
     v.extend(crate::selection_cmds::specs());
+    v.extend(crate::magnetic_cmds::specs());
     v.extend(crate::select_extra_cmds::specs());
     v.extend(crate::paint_cmds::specs());
     v.extend(crate::extra_cmds::specs());
