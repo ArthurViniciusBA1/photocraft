@@ -183,8 +183,7 @@ fn rgba_edit(s: &mut Session, label: &str, p: &Value, mut f: impl FnMut(&mut Vec
     let id = id.ok_or_else(|| EngineError::Other("no active layer".into()))?;
     s.edit(label, |doc, _| {
         let sel = doc.selection.clone();
-        let l = doc.layer_mut(id).ok_or(EngineError::NoLayer(id))?;
-        let surf = crate::commands::paint_surface(l, &Value::Null)?;
+        let surf = crate::commands::paint_surface(doc, id, &Value::Null)?;
         process_surface(surf, sel.as_ref(), &mut f);
         Ok(Value::Null)
     })
