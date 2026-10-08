@@ -1492,7 +1492,7 @@
 	Current Tool	Ferramenta atual
 	Custom Shape Tool	Ferramenta Forma personalizada
 	Cyans	Cianos
-	Default Photoshop Size	Tamanho padrão do Photoshop
+	Default Photoshop Size	Padrão do Photoshop
 	Delete Workspace	Excluir espaço de trabalho
 	Diamond	Diamante
 	Dimensions:	Dimensões:
@@ -2342,7 +2342,6 @@
 	Color Profile	Perfil de cores
 	Units	Unidades
 	Columns	Colunas
-	Do you want to save you made to “{name}” before quitting?	Deseja salvar as alterações feitas em “{name}” antes de sair?
 	Create new count group	Criar novo grupo de contagem
 	Adjustment Layer	Camada de ajuste
 	Pencil Tool	Ferramenta Lápis
