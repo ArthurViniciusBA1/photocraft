@@ -30,8 +30,9 @@ fn harness() -> (Harness<'static, PhotocraftApp>, LayerId) {
     (h, paint)
 }
 
+/// A document tab, found by its accessible title ("name @ 100% (…)", see `pro_tabs`).
 fn tab(h: &Harness<'_, PhotocraftApp>, name: &str) -> Pos2 {
-    h.get_by_role_and_label(Role::Button, name).rect().center()
+    h.get_by_label_contains(&format!("{name} @")).rect().center()
 }
 
 /// Press at `path[0]`, move through the rest (a few frames at each) and release at the last

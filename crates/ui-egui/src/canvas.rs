@@ -1188,7 +1188,6 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
         doc_tabs.push(r);
         let resp = ui.interact(r, ui.id().with(("ptab", i)), Sense::click());
         let sel = Some(i) == active;
-        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, sel, &st.doc.name));
         if sel {
             ui.painter().rect_filled(r, 0.0, t.chrome);
         } else if resp.hovered() {
